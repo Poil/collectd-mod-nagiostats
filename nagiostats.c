@@ -238,13 +238,13 @@ static int read_status (void) {
   fclose(fp);
 
   /* submit ALL the values !!! */
-  submit_gauge("gauge","hosts_up",hosts[0]);
-  submit_gauge("gauge","hosts_down",hosts[1]);
+  submit_gauge("gauge","hosts-up",hosts[0]);
+  submit_gauge("gauge","hosts-down",hosts[1]);
 
-  submit_gauge("gauge","services_ok",services[0]);
-  submit_gauge("gauge","services_warning",services[1]);
-  submit_gauge("gauge","services_critical",services[2]);
-  submit_gauge("gauge","services_unknown",services[3]);
+  submit_gauge("gauge","services-ok",services[0]);
+  submit_gauge("gauge","services-warning",services[1]);
+  submit_gauge("gauge","services-critical",services[2]);
+  submit_gauge("gauge","services-unknown",services[3]);
 
   return 0;
 }
