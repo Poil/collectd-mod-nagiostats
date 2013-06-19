@@ -1,6 +1,7 @@
 /*
  * A nagios stats plugin for collectd.
  * Written by Nicolas Szalay <nico@rottenbytes.info>
+ * Patched by Benjamin DUPUIS
  */
 
 #include <stdio.h>
@@ -76,7 +77,7 @@ nagios_stats init_nagios_stats(void) {
   return s;
 }
 
-static void submit_gauge (const char *type, const char *type_inst, gauge_t value) {
+static void submit_value (const char *type, const char *type_inst, gauge_t value) {
   value_t values[1];
   value_list_t vl = VALUE_LIST_INIT;
 
@@ -96,13 +97,8 @@ static void submit_gauge (const char *type, const char *type_inst, gauge_t value
 /* submit data structure, and do the calculations too */
 void submit_nagios_stats(nagios_stats s, const char *label) {
   value_t range_values[4];
-  value_list_t range_vl = VALUE_LIST_INIT;
-
   value_t exec_values[3];
-  value_list_t exec_vl = VALUE_LIST_INIT;
-
   value_t latency_values[3];
-  value_list_t latency_vl = VALUE_LIST_INIT;
 
   char tmp_label[BUFFSIZE];
 
@@ -119,19 +115,18 @@ void submit_nagios_stats(nagios_stats s, const char *label) {
   range_values[1].gauge = ((double)s.within_5_min / s.counter) * 100.0;
   range_values[2].gauge =  ((double)s.within_15_min / s.counter) * 100.0;
   range_values[3].gauge =  ((double)s.within_60_min / s.counter) * 100.0;
+  
+  sprintf(tmp_label, "perf_%s-1mins", label);
+  submit_value("percent",tmp_label,range_values[0].gauge);
 
-  range_vl.values = range_values;
-  range_vl.values_len = 4;
-  sstrncpy(range_vl.host, hostname_g, sizeof (range_vl.host));
-  sstrncpy(range_vl.plugin, "nagiostats", sizeof (range_vl.plugin));
-  // Custom type here, to group metrics and make it readable
-  // nagios_range              1_minute:GAUGE:0:100, 5_minutes:GAUGE:0:100, 15_minute:GAUGE:0:100, 60_minutes:GAUGE:0:100
-  sstrncpy(range_vl.type, "nagios_range", sizeof (range_vl.type));
-  strcpy(tmp_label, "");
-  strcat(tmp_label, label);
-  strcat(tmp_label, "_duration_ranges");
-  sstrncpy (range_vl.type_instance, tmp_label, sizeof (range_vl.type_instance));
-  plugin_dispatch_values (&range_vl);
+  sprintf(tmp_label, "perf_%s-5mins", label);
+  submit_value("percent",tmp_label,range_values[1].gauge);
+
+  sprintf(tmp_label, "perf_%s-15mins", label);
+  submit_value("percent",tmp_label,range_values[2].gauge);
+
+  sprintf(tmp_label, "perf_%s-60mins", label);
+  submit_value("percent",tmp_label,range_values[3].gauge);
 
   /* execution time : group min, max and avg in the same graph */
 #ifdef __DEBUG__
@@ -144,19 +139,12 @@ void submit_nagios_stats(nagios_stats s, const char *label) {
   exec_values[1].gauge = s.exec_time_max;
   exec_values[2].gauge = (s.exec_time_sum / (s.counter * 1.0));
 
-  exec_vl.values = exec_values;
-  exec_vl.values_len = 3;
-  sstrncpy(exec_vl.host, hostname_g, sizeof (exec_vl.host));
-  sstrncpy(exec_vl.plugin, "nagiostats", sizeof (exec_vl.plugin));
-  // Same as above
-  // nagios_time               min:GAUGE:0:U, max:GAUGE:0:U, average:GAUGE:0:U
-  sstrncpy(exec_vl.type, "nagios_time", sizeof (exec_vl.type));
-  strcpy(tmp_label, "");
-  strcat(tmp_label, label);
-  strcat(tmp_label, "_execution_time");
-  sstrncpy (exec_vl.type_instance, tmp_label, sizeof (exec_vl.type_instance));
-  plugin_dispatch_values (&exec_vl);
-
+  sprintf(tmp_label, "%s_execution-min", label);
+  submit_value("response_time",tmp_label,exec_values[0].gauge);
+  sprintf(tmp_label, "%s_execution-max", label);
+  submit_value("response_time",tmp_label,exec_values[1].gauge);
+  sprintf(tmp_label, "%s_execution-avg", label);
+  submit_value("response_time",tmp_label,exec_values[2].gauge);
 
   /* same for latency */
 #ifdef __DEBUG__
@@ -169,16 +157,12 @@ void submit_nagios_stats(nagios_stats s, const char *label) {
   latency_values[1].gauge = s.latency_time_max;
   latency_values[2].gauge = (s.latency_time_sum / (s.counter * 1.0));
 
-  latency_vl.values = latency_values;
-  latency_vl.values_len = 3;
-  sstrncpy(latency_vl.host, hostname_g, sizeof (latency_vl.host));
-  sstrncpy(latency_vl.plugin, "nagiostats", sizeof (latency_vl.plugin));
-  sstrncpy(latency_vl.type, "nagios_time", sizeof (latency_vl.type));
-  strcpy(tmp_label, "");
-  strcat(tmp_label, label);
-  strcat(tmp_label, "_execution_latency");
-  sstrncpy (latency_vl.type_instance, tmp_label, sizeof (latency_vl.type_instance));
-  plugin_dispatch_values (&latency_vl);
+  sprintf(tmp_label, "%s_execution-min", label);
+  submit_value("latency",tmp_label,latency_values[0].gauge);
+  sprintf(tmp_label, "%s_execution-max", label);
+  submit_value("latency",tmp_label,latency_values[1].gauge);
+  sprintf(tmp_label, "%s_execution-avg", label);
+  submit_value("latency",tmp_label,latency_values[2].gauge);
 }
 
 /*
@@ -238,13 +222,13 @@ static int read_status (void) {
   fclose(fp);
 
   /* submit ALL the values !!! */
-  submit_gauge("gauge","hosts-up",hosts[0]);
-  submit_gauge("gauge","hosts-down",hosts[1]);
+  submit_value("gauge","hosts-up",hosts[0]);
+  submit_value("gauge","hosts-down",hosts[1]);
 
-  submit_gauge("gauge","services-ok",services[0]);
-  submit_gauge("gauge","services-warning",services[1]);
-  submit_gauge("gauge","services-critical",services[2]);
-  submit_gauge("gauge","services-unknown",services[3]);
+  submit_value("gauge","services-ok",services[0]);
+  submit_value("gauge","services-warning",services[1]);
+  submit_value("gauge","services-critical",services[2]);
+  submit_value("gauge","services-unknown",services[3]);
 
   return 0;
 }
@@ -484,4 +468,3 @@ void module_register (void) {
   plugin_register_read("nagiostats", nagiostats_read);
   return;
 } /* void module_register (void) */
-
